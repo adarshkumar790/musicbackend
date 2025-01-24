@@ -2,8 +2,6 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const bodyParser = require("body-parser");
-const multer = require("multer");
-const path = require("path");
 
 const app = express();
 const PORT = 5000;
@@ -11,7 +9,6 @@ const PORT = 5000;
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
-app.use("/uploads", express.static(path.join(__dirname, "uploads"))); // Serve uploaded images
 
 // MongoDB connection
 mongoose
@@ -25,25 +22,13 @@ mongoose
 // Movie Schema
 const movieSchema = new mongoose.Schema({
   title: { type: String, required: true },
-  image: { type: String, required: true }, // Store the image path
+  image: { type: String, required: true },
   link: { type: String, required: true },
   createdBy: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
 });
 
 const Movie = mongoose.model("Movie", movieSchema);
-
-// Configure Multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, "uploads/"); // Directory to save files
-  },
-  filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`); // Unique filename
-  },
-});
-
-const upload = multer({ storage });
 
 // Routes
 
@@ -57,16 +42,10 @@ app.get("/movies", async (req, res) => {
   }
 });
 
-// Add a new movie with image upload
-app.post("/movies", upload.single("image"), async (req, res) => {
+// Add a new movie
+app.post("/movies", async (req, res) => {
   try {
-    const { title, link, createdBy } = req.body;
-    const image = req.file ? `/uploads/${req.file.filename}` : null; // Get uploaded image path
-
-    if (!image) {
-      return res.status(400).json({ message: "Image file is required" });
-    }
-
+    const { title, image, link, createdBy } = req.body;
     const newMovie = new Movie({ title, image, link, createdBy });
     await newMovie.save();
     res.json({ success: true, movie: newMovie });
@@ -75,27 +54,19 @@ app.post("/movies", upload.single("image"), async (req, res) => {
   }
 });
 
-// Update a movie (with optional image upload)
-app.put("/movies/:id", upload.single("image"), async (req, res) => {
+// Update a movie
+app.put("/movies/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, link, createdBy } = req.body;
-    let image = req.body.image; // Keep existing image if not uploaded
-
-    if (req.file) {
-      image = `/uploads/${req.file.filename}`; // Update image path if a new file is uploaded
-    }
-
+    const { title, image, link, createdBy } = req.body; 
     const updatedMovie = await Movie.findByIdAndUpdate(
       id,
       { title, image, link, createdBy },
-      { new: true }
+      { new: true } 
     );
-
     if (!updatedMovie) {
       return res.status(404).json({ message: "Movie not found" });
     }
-
     res.json({ success: true, movie: updatedMovie });
   } catch (error) {
     res.status(500).json({ message: "Failed to update movie", error });
