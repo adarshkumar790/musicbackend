@@ -4,7 +4,6 @@ const cors = require("cors");
 const bodyParser = require("body-parser");
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
 
 const app = express();
 const PORT = 5000;
@@ -12,7 +11,7 @@ const PORT = 5000;
 // Middleware
 app.use(cors());
 app.use(bodyParser.json());
-app.use("/uploads", express.static(path.join(__dirname, "uploads"))); // Serve uploaded images statically
+app.use("/uploads", express.static(path.join(__dirname, "uploads"))); // Serve images statically
 
 // MongoDB connection
 mongoose
@@ -26,23 +25,18 @@ mongoose
 // Multer setup for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = path.join(__dirname, "uploads");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir); // Create uploads directory if it doesn't exist
-    }
-    cb(null, uploadDir);
+    cb(null, "uploads/"); // Save files in 'uploads' directory
   },
   filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
+    cb(null, `${Date.now()}-${file.originalname}`); // Unique file name
   },
 });
-
 const upload = multer({ storage });
 
 // Movie Schema
 const movieSchema = new mongoose.Schema({
   title: { type: String, required: true },
-  image: { type: String, required: true }, // Store the file path of the uploaded image
+  image: { type: String, required: true },
   link: { type: String, required: true },
   createdBy: { type: String, required: true },
   createdAt: { type: Date, default: Date.now },
@@ -62,17 +56,12 @@ app.get("/movies", async (req, res) => {
   }
 });
 
-// Add a new movie with image upload
+// Add a new movie
 app.post("/movies", upload.single("image"), async (req, res) => {
   try {
     const { title, link, createdBy } = req.body;
-    const image = req.file ? `/uploads/${req.file.filename}` : null;
-
-    if (!image) {
-      return res.status(400).json({ message: "Image is required" });
-    }
-
-    const newMovie = new Movie({ title, image, link, createdBy });
+    const imagePath = `/uploads/${req.file.filename}`;
+    const newMovie = new Movie({ title, image: imagePath, link, createdBy });
     await newMovie.save();
     res.json({ success: true, movie: newMovie });
   } catch (error) {
@@ -85,12 +74,11 @@ app.put("/movies/:id", upload.single("image"), async (req, res) => {
   try {
     const { id } = req.params;
     const { title, link, createdBy } = req.body;
-    const image = req.file ? `/uploads/${req.file.filename}` : undefined;
-
-    const updatedData = { title, link, createdBy };
-    if (image) updatedData.image = image;
-
-    const updatedMovie = await Movie.findByIdAndUpdate(id, updatedData, { new: true });
+    let updatedFields = { title, link, createdBy };
+    if (req.file) {
+      updatedFields.image = `/uploads/${req.file.filename}`;
+    }
+    const updatedMovie = await Movie.findByIdAndUpdate(id, updatedFields, { new: true });
     if (!updatedMovie) {
       return res.status(404).json({ message: "Movie not found" });
     }
@@ -108,15 +96,6 @@ app.delete("/movies/:id", async (req, res) => {
     if (!deletedMovie) {
       return res.status(404).json({ message: "Movie not found" });
     }
-
-    // Optionally delete the associated image file
-    if (deletedMovie.image) {
-      const imagePath = path.join(__dirname, deletedMovie.image);
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
-      }
-    }
-
     res.json({ success: true, message: "Movie deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: "Failed to delete movie", error });
